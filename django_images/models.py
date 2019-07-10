@@ -1,10 +1,11 @@
 import hashlib
 import os.path
 from io import BytesIO
-
+    
 from django.db import models
 from django.core.files.uploadedfile import InMemoryUploadedFile
-from django.core.urlresolvers import reverse
+#from django.core.urlresolvers import reverse
+from django.urls import reverse
 from django.dispatch import receiver
 import PIL
 
@@ -16,20 +17,19 @@ except ImportError:
 from . import utils
 from .settings import IMAGE_SIZES, IMAGE_PATH, IMAGE_AUTO_DELETE
 
-
 def hashed_upload_to(instance, filename, **kwargs):
     image_type = 'original' if isinstance(instance, Image) else 'thumbnail'
     prefix = 'image/%s/by-md5/' % (image_type,)
     hasher = hashlib.md5()
     for chunk in instance.image.chunks():
         hasher.update(chunk)
-    hash_ = hasher.hexdigest()
+    hash = hasher.hexdigest()
     base, ext = os.path.splitext(filename)
     return '%(prefix)s%(first)s/%(second)s/%(hash)s/%(base)s%(ext)s' % {
         'prefix': prefix,
-        'first': hash_[0],
-        'second': hash_[1],
-        'hash': hash_,
+        'first': hash[0],
+        'second': hash[1],
+        'hash': hash,
         'base': base,
         'ext': ext,
     }
@@ -49,8 +49,8 @@ else:
 
 class Image(models.Model):
     image = models.ImageField(upload_to=upload_to,
-                              height_field='height', width_field='width',
-                              max_length=255)
+            height_field='height', width_field='width',
+            max_length=255)
     height = models.PositiveIntegerField(default=0, editable=False)
     width = models.PositiveIntegerField(default=0, editable=False)
 
@@ -69,7 +69,7 @@ class Image(models.Model):
 class ThumbnailManager(models.Manager):
     def get_or_create_at_size(self, image_id, size):
         image = Image.objects.get(id=image_id)
-        if size not in IMAGE_SIZES:
+        if not size in IMAGE_SIZES:
             raise ValueError("Received unknown size: %s" % size)
         try:
             thumbnail = image.get_by_size(size)
@@ -94,22 +94,21 @@ class ThumbnailManager(models.Manager):
                     raise
             # and save to storage
             original_dir, original_file = os.path.split(image.image.name)
-            thumb_file = InMemoryUploadedFile(buf, "image", original_file,
-                                              None, buf.tell(), None)
+            thumb_file = InMemoryUploadedFile(buf, "image", original_file, None, buf.tell(), None)
             thumbnail, created = image.thumbnail_set.get_or_create(
-                size=size, defaults={'image': thumb_file})
+                size=size,
+                defaults={'image': thumb_file})
         return thumbnail
 
-
 class Thumbnail(models.Model):
-    original = models.ForeignKey(Image)
+    original = models.ForeignKey(Image, on_delete=models.CASCADE)
     image = models.ImageField(upload_to=upload_to,
-                              height_field='height', width_field='width',
-                              max_length=255)
+            height_field='height', width_field='width',
+            max_length=255)
     size = models.CharField(max_length=100)
     height = models.PositiveIntegerField(default=0, editable=False)
     width = models.PositiveIntegerField(default=0, editable=False)
-
+    
     objects = ThumbnailManager()
 
     class Meta:
